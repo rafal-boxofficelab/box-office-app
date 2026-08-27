@@ -2,22 +2,106 @@ import streamlit as st
 import requests
 from supabase import create_client
 
-# --- 1. KONFIGURACJA STRONY ---
-st.set_page_config(page_title="Box Office League", page_icon="🎬", layout="wide")
+# --- 1. KONFIGURACJA STRONY & STYLE CINEMAGHOST (MAGENTA/BURGUNDY) ---
+st.set_page_config(
+    page_title="Liga Box Office | CinemaGhost", 
+    page_icon="🎬", 
+    layout="wide"
+)
+
+# Zaawansowany CSS: głęboka czerń, burgund CinemaGhost, karty z poświatą
+st.markdown("""
+    <style>
+    @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&display=swap');
+
+    html, body, [class*="css"] {
+        font-family: 'Plus Jakarta Sans', sans-serif;
+    }
+
+    /* Nagłówki */
+    h1, h2, h3, h4 {
+        color: #FFFFFF !important;
+        font-weight: 800 !important;
+        letter-spacing: -0.02em;
+    }
+
+    /* Tła kart kontenerów (st.container border=True) */
+    div[data-testid="stVerticalBlockBorderWrapper"] {
+        background: linear-gradient(180deg, #131217 0%, #0A090D 100%);
+        border: 1px solid #2B1E28 !important;
+        border-radius: 12px !important;
+        padding: 16px !important;
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.6);
+        transition: border-color 0.25s ease, box-shadow 0.25s ease;
+    }
+    div[data-testid="stVerticalBlockBorderWrapper"]:hover {
+        border-color: #B81D4C !important;
+        box-shadow: 0 0 18px rgba(184, 29, 76, 0.25);
+    }
+
+    /* Przyciski główne i akcje */
+    .stButton>button {
+        width: 100%;
+        border-radius: 6px;
+        font-weight: 700;
+        font-size: 14px;
+        letter-spacing: 0.3px;
+        background: linear-gradient(135deg, #C2185B 0%, #9C1540 100%);
+        color: #FFFFFF !important;
+        border: 1px solid #D81B60;
+        padding: 0.6rem 1rem;
+        transition: all 0.2s ease;
+    }
+    .stButton>button:hover {
+        background: linear-gradient(135deg, #D81B60 0%, #B81D4C 100%);
+        box-shadow: 0 0 16px rgba(216, 27, 96, 0.5);
+        transform: translateY(-1px);
+    }
+
+    /* Metryki liczbowe */
+    div[data-testid="stMetricValue"] {
+        font-size: 26px !important;
+        font-weight: 800 !important;
+        color: #E22D68 !important;
+    }
+    div[data-testid="stMetricLabel"] {
+        color: #A1A1AA !important;
+        font-size: 13px !important;
+        font-weight: 600 !important;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+
+    /* Dropdowny (st.expander) w rankingu */
+    div[data-testid="stExpander"] {
+        background-color: #111014;
+        border: 1px solid #281D26 !important;
+        border-radius: 8px !important;
+        margin-bottom: 8px;
+    }
+    div[data-testid="stExpander"]:hover {
+        border-color: #B81D4C !important;
+    }
+
+    /* Pola inputów formularzy */
+    .stTextInput input, .stNumberInput input, .stDateInput input {
+        background-color: #0A0A0D !important;
+        color: #FFFFFF !important;
+        border: 1px solid #2B212C !important;
+        border-radius: 6px !important;
+    }
+    .stTextInput input:focus, .stNumberInput input:focus {
+        border-color: #B81D4C !important;
+        box-shadow: 0 0 10px rgba(184, 29, 76, 0.4) !important;
+    }
+    </style>
+""", unsafe_allow_html=True)
 
 URL = st.secrets["SUPABASE_URL"]
 KEY = st.secrets["SUPABASE_KEY"]
 TMDB_KEY = st.secrets.get("TMDB_API_KEY", "")
 
 supabase = create_client(URL, KEY)
-
-# Lekki CSS stylizujący przyciski i akcenty
-st.markdown("""
-    <style>
-    .stButton>button { width: 100%; border-radius: 8px; font-weight: bold; }
-    div[data-testid="stMetricValue"] { font-size: 24px; color: #E50914; }
-    </style>
-""", unsafe_allow_html=True)
 
 if "user" not in st.session_state:
     st.session_state.user = None
@@ -27,13 +111,11 @@ def search_tmdb_movie(title_query):
     if not TMDB_KEY:
         return None
     
-    # 1. Wyszukanie w języku polskim
     search_url = f"https://api.themoviedb.org/3/search/movie?api_key={TMDB_KEY}&query={title_query}&language=pl-PL"
     res = requests.get(search_url).json()
     
     results = res.get("results", [])
     if not results:
-        # Próba po angielsku
         search_url = f"https://api.themoviedb.org/3/search/movie?api_key={TMDB_KEY}&query={title_query}&language=en-US"
         res = requests.get(search_url).json()
         results = res.get("results", [])
@@ -69,45 +151,47 @@ def search_tmdb_movie(title_query):
 
 # --- 2. EKRAN LOGOWANIA / REJESTRACJI ---
 if not st.session_state.user:
-    col1, col2, col3 = st.columns([1, 2, 1])
+    col1, col2, col3 = st.columns([1, 1.8, 1])
     with col2:
-        st.markdown("<h1 style='text-align: center;'>🎬 LIGA BOX OFFICE</h1>", unsafe_allow_html=True)
-        st.markdown("<p style='text-align: center; color: #888;'>Ekspercki Portal Typowania Widzów w Kinach</p>", unsafe_allow_html=True)
-        st.write("---")
+        st.markdown("<div style='text-align: center; margin-bottom: 24px;'>", unsafe_allow_html=True)
+        st.markdown("<h1 style='color: #E22D68 !important; margin-bottom: 4px;'>🎬 LIGA BOX OFFICE</h1>", unsafe_allow_html=True)
+        st.markdown("<p style='color: #A1A1AA; font-size: 15px;'>Ekspercki Portal Typowania Widzów w Kinach</p>", unsafe_allow_html=True)
+        st.markdown("</div>", unsafe_allow_html=True)
         
-        tab1, tab2 = st.tabs(["🔒 Logowanie", "📝 Rejestracja Eksperta"])
-        
-        with tab1:
-            email = st.text_input("Email", placeholder="ekspert@kino.pl")
-            password = st.text_input("Hasło", type="password")
-            if st.button("Zaloguj się", type="primary"):
-                try:
-                    res = supabase.auth.sign_in_with_password({"email": email, "password": password})
-                    st.session_state.user = res.user
-                    st.rerun()
-                except Exception:
-                    st.error("Błędny email lub hasło.")
-                    
-        with tab2:
-            name = st.text_input("Imię i Nazwisko / Pseudonim")
-            reg_email = st.text_input("Email", key="reg_e")
-            reg_pass = st.text_input("Hasło (min. 6 znaków)", type="password", key="reg_p")
-            if st.button("Załóż konto Eksperta"):
-                try:
-                    res = supabase.auth.sign_up({
-                        "email": reg_email, 
-                        "password": reg_pass,
-                        "options": {"data": {"full_name": name}}
-                    })
-                    st.success("Konto utworzone! Możesz się teraz zalogować.")
-                except Exception as e:
-                    st.error(f"Błąd rejestracji: {e}")
+        with st.container(border=True):
+            tab1, tab2 = st.tabs(["🔒 Logowanie Eksperta", "📝 Dołącz do Ligi"])
+            
+            with tab1:
+                email = st.text_input("Adres Email", placeholder="ekspert@kino.pl")
+                password = st.text_input("Hasło", type="password")
+                if st.button("Zaloguj się do panelu", type="primary"):
+                    try:
+                        res = supabase.auth.sign_in_with_password({"email": email, "password": password})
+                        st.session_state.user = res.user
+                        st.rerun()
+                    except Exception:
+                        st.error("Błędny email lub hasło.")
+                        
+            with tab2:
+                name = st.text_input("Imię i Nazwisko / Pseudonim")
+                reg_email = st.text_input("Adres Email", key="reg_e")
+                reg_pass = st.text_input("Hasło (min. 6 znaków)", type="password", key="reg_p")
+                if st.button("Zarejestruj konto Eksperta"):
+                    try:
+                        res = supabase.auth.sign_up({
+                            "email": reg_email, 
+                            "password": reg_pass,
+                            "options": {"data": {"full_name": name}}
+                        })
+                        st.success("Konto utworzone! Możesz się teraz zalogować.")
+                    except Exception as e:
+                        st.error(f"Błąd rejestracji: {e}")
 
 # --- 3. PANEL DLA ZALOGOWANEGO UŻYTKOWNIKA ---
 else:
-    st.sidebar.image("https://img.icons8.com/color/96/clapperboard.png", width=60)
-    st.sidebar.title("Panel Nawigacyjny")
-    st.sidebar.caption(f"👤 {st.session_state.user.email}")
+    st.sidebar.image("https://img.icons8.com/color/96/clapperboard.png", width=55)
+    st.sidebar.markdown("### **Panel Eksperta**")
+    st.sidebar.caption(f"Zalogowany: `{st.session_state.user.email}`")
     
     if st.sidebar.button("🚪 Wyloguj"):
         supabase.auth.sign_out()
@@ -115,7 +199,7 @@ else:
         st.rerun()
         
     st.sidebar.write("---")
-    menu = st.sidebar.radio("Wybierz zakładkę", [
+    menu = st.sidebar.radio("Nawigacja", [
         "🎯 Głosowanie Tygodnia", 
         "🏆 Tabela Ligi", 
         "👤 Swój Profil",
@@ -135,7 +219,7 @@ else:
         else:
             for m in movies:
                 with st.container(border=True):
-                    col_img, col_info, col_form = st.columns([1.2, 2.5, 2])
+                    col_img, col_info, col_form = st.columns([1.1, 2.4, 1.8])
                     
                     with col_img:
                         if m.get("poster_url"):
@@ -148,7 +232,7 @@ else:
                         if m.get("original_title") and m["original_title"] != m["title"]:
                             st.caption(f"Tytuł oryginalny: *{m['original_title']}*")
                         
-                        st.write(f"📅 **Premiera:** `{m['release_date']}`")
+                        st.write(f"📅 **Data premiery:** `{m['release_date']}`")
                         if m.get("genres"):
                             st.write(f"🎭 **Gatunek:** {m['genres']}")
                         if m.get("director"):
@@ -157,7 +241,7 @@ else:
                             st.write(f"👥 **Obsada:** {m['cast_members']}")
 
                     with col_form:
-                        st.write("#### Twój Szacunek")
+                        st.markdown("#### **Twój Szacunek**")
                         existing = supabase.table("predictions").select("*")\
                             .eq("user_id", st.session_state.user.id)\
                             .eq("movie_id", m['id']).execute().data
@@ -166,7 +250,7 @@ else:
                         
                         with st.form(key=f"form_{m['id']}"):
                             val = st.number_input(
-                                "Liczba widzów w premierowy weekend:", 
+                                "Szacowana liczba widzów:", 
                                 min_value=0, 
                                 value=current_val, 
                                 step=5000,
@@ -187,11 +271,10 @@ else:
                                     }).execute()
                                     st.toast("Zapisano Twój typ!", icon="🚀")
 
-    # === ZAKŁADKA 2: TABELA LIGI Z ODZNAKAMI, DROPDOWNAMI I SUPER STRZAŁAMI ===
+    # === ZAKŁADKA 2: TABELA LIGI Z ODZNAKAMI I DROPDOWNAMI ===
     elif menu == "🏆 Tabela Ligi":
         st.title("🏆 Klasyfikacja Ligi Box Office")
         
-        # Pobieramy rozliczone predykcje
         data = supabase.table("predictions")\
             .select("user_id, points, error_margin, estimated_opening, movies(id, title, release_date, official_bo_result), profiles(full_name)")\
             .not_.is_("points", "null")\
@@ -200,7 +283,6 @@ else:
         if not data:
             st.warning("Tabela jest jeszcze pusta. Poczekaj na podliczenie pierwszych wyników!")
         else:
-            # Ustalenie najnowszej rozliczonej daty do filtra
             all_release_dates = [
                 row["movies"]["release_date"] 
                 for row in data 
@@ -208,7 +290,6 @@ else:
             ]
             latest_date = max(all_release_dates) if all_release_dates else None
 
-            # Przełącznik filtrów
             view_mode = st.radio(
                 "Wybierz widok rankingu:",
                 ["🌐 Cały Sezon (Klasyfikacja Generalna)", "🔥 Ostatnia Kolejka (Ostatni Weekend)"],
@@ -256,13 +337,12 @@ else:
                 if uid not in user_details:
                     user_details[uid] = []
                 
-                # Formatowanie liczby widzów
                 est_formatted = f"{int(est):,} widzów".replace(",", " ") if est is not None else "-"
                 bo_formatted = f"{int(bo_res):,} widzów".replace(",", " ") if bo_res is not None else "-"
                 
                 if is_super_shot:
                     est_display = f"⭐ {est_formatted} (Super Strzał)"
-                    pts_display = f"{int(pts)} pkt (💰 100 zł)"
+                    pts_display = f"{int(pts)} pkt (💰 100,00 zł)"
                 else:
                     est_display = est_formatted
                     pts_display = f"{int(pts)} pkt ({cash_for_movie:.2f} zł)"
@@ -311,9 +391,8 @@ else:
                         st.metric("Suma", f"{int(sorted_users[2][1])} pkt", f"{user_payouts[u3]:.2f} PLN")
 
             st.write("---")
-            st.subheader("📊 Ranking (Kliknij eksperta, aby rozwinąć typy)")
+            st.subheader("📊 Ranking Ekspertów")
 
-            # Lista rozwijana (dropdown) dla każdego eksperta
             for rank, (uid, total_pts) in enumerate(sorted_users, start=1):
                 name = user_names[uid]
                 payout = user_payouts[uid]
@@ -328,9 +407,9 @@ else:
                     st.dataframe(user_details[uid], use_container_width=True, hide_index=True)
             
             st.write("---")
-            with st.expander("ℹ️ Legenda oznaczeń i nagród"):
+            with st.expander("ℹ️ Legenda punktacji i nagród"):
                 st.markdown("""
-                * ⭐ **Super Strzał (Błąd $\le$ 1.0%):** **100 pkt + 100 zł nagrody** (oraz odznaka 🎯)
+                * ⭐ **Super Strzał (Błąd $\le$ 1.0%):** **100 pkt + 100,00 zł nagrody** (oraz odznaka 🎯)
                 * **Błąd 1.1% – 5.0%:** 100 pkt *(50,00 zł)*
                 * **Błąd 5.1% – 20.0%:** 40 pkt *(20,00 zł)*
                 * **Błąd 20.1% – 50.0%:** 10 pkt *(5,00 zł)*
@@ -372,16 +451,16 @@ else:
                 est = p.get('estimated_opening')
                 
                 if err is not None and err <= 1.00:
-                    pts_str = f"⭐ {int(pts)} pkt (100 zł)"
+                    pts_str = f"⭐ {int(pts)} pkt (100,00 zł)"
                 elif pts is not None:
                     pts_str = f"{int(pts)} pkt ({pts * 0.5:.2f} zł)"
                 else:
-                    pts_str = "W trakcie"
+                    pts_str = "Oczekuje na BO"
                 
                 history.append({
                     "Film": movie_title,
                     "Twój Typ": f"{int(est):,} widzów".replace(",", " ") if est is not None else "-",
-                    "Błąd %": f"{err:.1f}%" if err is not None else "Oczekuje na BO",
+                    "Błąd %": f"{err:.1f}%" if err is not None else "W trakcie",
                     "Status / Punkty": pts_str
                 })
             st.dataframe(history, use_container_width=True, hide_index=True)
@@ -400,7 +479,7 @@ else:
             col_search, col_preview = st.columns([1, 1.2])
             
             with col_search:
-                movie_search = st.text_input("Wpisz tytuł filmu do wyszukania w TMDB:", placeholder="np. Diuna 2, Gladiator 2")
+                movie_search = st.text_input("Wpisz tytuł filmu do wyszukania w TMDB:", placeholder="np. Diuna 2, Joker 2")
                 search_btn = st.button("🔍 Pobierz dane z TMDB")
                 
                 if "tmdb_data" not in st.session_state:
