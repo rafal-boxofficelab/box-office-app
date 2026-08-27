@@ -2,20 +2,34 @@ import streamlit as st
 import requests
 from supabase import create_client
 
-# --- 1. KONFIGURACJA STRONY & STYLE CINEMAGHOST (MAGENTA/BURGUNDY) ---
-st.set_page_config(
-    page_title="Liga Box Office | CinemaGhost", 
-    page_icon="🎬", 
-    layout="wide"
-)
+# --- 1. KONFIGURACJA STRONY & STYLE CINEMAGHOST MAGENTA ---
+st.set_page_config(page_title="Liga Box Office", page_icon="🎬", layout="wide")
 
-# Zaawansowany CSS: głęboka czerń, burgund CinemaGhost, karty z poświatą
+URL = st.secrets["SUPABASE_URL"]
+KEY = st.secrets["SUPABASE_KEY"]
+TMDB_KEY = st.secrets.get("TMDB_API_KEY", "")
+
+supabase = create_client(URL, KEY)
+
+# Pełny CSS: kinowe tło magenty/burgundu, stylizowane karty, inputy i przyciski
 st.markdown("""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&display=swap');
 
     html, body, [class*="css"] {
         font-family: 'Plus Jakarta Sans', sans-serif;
+    }
+
+    /* Główne tło aplikacji - kinowa magenta z winietą */
+    .stApp {
+        background: radial-gradient(circle at center, #240a17 0%, #12030b 60%, #080105 100%) !important;
+        color: #FFFFFF !important;
+    }
+
+    /* Sidebar - spójny ciemnomagentowy odcień */
+    section[data-testid="stSidebar"] {
+        background-color: #15050f !important;
+        border-right: 1px solid #3d0d24 !important;
     }
 
     /* Nagłówki */
@@ -25,10 +39,10 @@ st.markdown("""
         letter-spacing: -0.02em;
     }
 
-    /* Tła kart kontenerów (st.container border=True) */
+    /* Karty kontenerów (st.container border=True) */
     div[data-testid="stVerticalBlockBorderWrapper"] {
-        background: linear-gradient(180deg, #131217 0%, #0A090D 100%);
-        border: 1px solid #2B1E28 !important;
+        background: linear-gradient(180deg, rgba(38, 12, 26, 0.75) 0%, rgba(20, 5, 13, 0.9) 100%) !important;
+        border: 1px solid #4a122e !important;
         border-radius: 12px !important;
         padding: 16px !important;
         box-shadow: 0 10px 30px rgba(0, 0, 0, 0.6);
@@ -36,46 +50,46 @@ st.markdown("""
     }
     div[data-testid="stVerticalBlockBorderWrapper"]:hover {
         border-color: #B81D4C !important;
-        box-shadow: 0 0 18px rgba(184, 29, 76, 0.25);
+        box-shadow: 0 0 20px rgba(184, 29, 76, 0.35);
     }
 
-    /* Przyciski główne i akcje */
+    /* Przyciski CinemaGhost (gradient malinowa magenta) */
     .stButton>button {
         width: 100%;
         border-radius: 6px;
         font-weight: 700;
         font-size: 14px;
         letter-spacing: 0.3px;
-        background: linear-gradient(135deg, #C2185B 0%, #9C1540 100%);
+        background: linear-gradient(135deg, #C2185B 0%, #9C1540 100%) !important;
         color: #FFFFFF !important;
-        border: 1px solid #D81B60;
+        border: 1px solid #D81B60 !important;
         padding: 0.6rem 1rem;
         transition: all 0.2s ease;
     }
     .stButton>button:hover {
-        background: linear-gradient(135deg, #D81B60 0%, #B81D4C 100%);
-        box-shadow: 0 0 16px rgba(216, 27, 96, 0.5);
+        background: linear-gradient(135deg, #E22D68 0%, #B81D4C 100%) !important;
+        box-shadow: 0 0 16px rgba(226, 45, 104, 0.6) !important;
         transform: translateY(-1px);
     }
 
-    /* Metryki liczbowe */
+    /* Wartości i etykiety metryk */
     div[data-testid="stMetricValue"] {
         font-size: 26px !important;
         font-weight: 800 !important;
         color: #E22D68 !important;
     }
     div[data-testid="stMetricLabel"] {
-        color: #A1A1AA !important;
+        color: #D1A3B8 !important;
         font-size: 13px !important;
         font-weight: 600 !important;
         text-transform: uppercase;
         letter-spacing: 0.5px;
     }
 
-    /* Dropdowny (st.expander) w rankingu */
+    /* Rozwijane dropdowny (st.expander) w tabeli */
     div[data-testid="stExpander"] {
-        background-color: #111014;
-        border: 1px solid #281D26 !important;
+        background-color: rgba(26, 7, 18, 0.8) !important;
+        border: 1px solid #4a122e !important;
         border-radius: 8px !important;
         margin-bottom: 8px;
     }
@@ -83,25 +97,19 @@ st.markdown("""
         border-color: #B81D4C !important;
     }
 
-    /* Pola inputów formularzy */
+    /* Inputy formularzy */
     .stTextInput input, .stNumberInput input, .stDateInput input {
-        background-color: #0A0A0D !important;
+        background-color: #12030b !important;
         color: #FFFFFF !important;
-        border: 1px solid #2B212C !important;
+        border: 1px solid #4a122e !important;
         border-radius: 6px !important;
     }
     .stTextInput input:focus, .stNumberInput input:focus {
-        border-color: #B81D4C !important;
-        box-shadow: 0 0 10px rgba(184, 29, 76, 0.4) !important;
+        border-color: #E22D68 !important;
+        box-shadow: 0 0 10px rgba(226, 45, 104, 0.4) !important;
     }
     </style>
 """, unsafe_allow_html=True)
-
-URL = st.secrets["SUPABASE_URL"]
-KEY = st.secrets["SUPABASE_KEY"]
-TMDB_KEY = st.secrets.get("TMDB_API_KEY", "")
-
-supabase = create_client(URL, KEY)
 
 if "user" not in st.session_state:
     st.session_state.user = None
@@ -155,7 +163,7 @@ if not st.session_state.user:
     with col2:
         st.markdown("<div style='text-align: center; margin-bottom: 24px;'>", unsafe_allow_html=True)
         st.markdown("<h1 style='color: #E22D68 !important; margin-bottom: 4px;'>🎬 LIGA BOX OFFICE</h1>", unsafe_allow_html=True)
-        st.markdown("<p style='color: #A1A1AA; font-size: 15px;'>Ekspercki Portal Typowania Widzów w Kinach</p>", unsafe_allow_html=True)
+        st.markdown("<p style='color: #D1A3B8; font-size: 15px;'>Ekspercki Portal Typowania Widzów w Kinach</p>", unsafe_allow_html=True)
         st.markdown("</div>", unsafe_allow_html=True)
         
         with st.container(border=True):
