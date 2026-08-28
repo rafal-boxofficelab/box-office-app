@@ -11,7 +11,7 @@ TMDB_KEY = st.secrets.get("TMDB_API_KEY", "")
 
 supabase = create_client(URL, KEY)
 
-# Pełny CSS: kinowe tło magenty/burgundu, stylizowane karty, inputy i przyciski
+# Pełny CSS: kinowe tło magenty/burgundu, stylizowane karty, inputy, slidery i przyciski
 st.markdown("""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&display=swap');
@@ -107,6 +107,11 @@ st.markdown("""
     .stTextInput input:focus, .stNumberInput input:focus {
         border-color: #E22D68 !important;
         box-shadow: 0 0 10px rgba(226, 45, 104, 0.4) !important;
+    }
+
+    /* Akcenty dla suwaka (Slider) */
+    div[data-testid="stSlider"] > div {
+        color: #E22D68 !important;
     }
     </style>
 """, unsafe_allow_html=True)
@@ -217,7 +222,7 @@ else:
     # === ZAKŁADKA 1: GŁOSOWANIE NA WIDZÓW ===
     if menu == "🎯 Głosowanie Tygodnia":
         st.title("🎯 Typowanie Otwarć Kinowych")
-        st.caption("Wprowadź szacowaną **liczbę widzów** w weekend premierowy (piątek - niedziela).")
+        st.caption("Przesuń suwak, aby wybrać szacowaną **liczbę widzów** w weekend premierowy (piątek - niedziela).")
         st.write("---")
         
         movies = supabase.table("movies").select("*").eq("voting_open", True).order("release_date").execute().data
@@ -241,6 +246,8 @@ else:
                             st.caption(f"Tytuł oryginalny: *{m['original_title']}*")
                         
                         st.write(f"📅 **Data premiery:** `{m['release_date']}`")
+                        if m.get("distributor"):
+                            st.write(f"🏢 **Dystrybutor:** {m['distributor']}")
                         if m.get("genres"):
                             st.write(f"🎭 **Gatunek:** {m['genres']}")
                         if m.get("director"):
@@ -254,30 +261,44 @@ else:
                             .eq("user_id", st.session_state.user.id)\
                             .eq("movie_id", m['id']).execute().data
                         
-                        current_val = int(existing[0]['estimated_opening']) if existing else 50000
+                        if existing:
+                            raw_val = int(existing[0]['estimated_opening'])
+                            current_val = max(1000, min(500000, raw_val))
+                            saved_label = f"{raw_val:,} widzów".replace(",", " ")
+                            st.markdown(f"💾 *Zapisany w bazie typ:* **{saved_label}**")
+                        else:
+                            current_val = 50000
+                            st.markdown("ℹ️ *Nie oddano jeszcze głosu na ten film.*")
                         
                         with st.form(key=f"form_{m['id']}"):
-                            val = st.number_input(
-                                "Szacowana liczba widzów:", 
-                                min_value=0, 
-                                value=current_val, 
-                                step=5000,
+                            val = st.slider(
+                                "Ustaw liczbę widzów:",
+                                min_value=1000,
+                                max_value=500000,
+                                value=current_val,
+                                step=1000,
                                 format="%d"
                             )
+                            
+                            val_formatted = f"{val:,} widzów".replace(",", " ")
+                            st.info(f"Wybrano: **{val_formatted}**")
+                            
                             submit = st.form_submit_button("Zapisz typ" if not existing else "Zaktualizuj typ", type="primary")
                             
                             if submit:
                                 if existing:
                                     supabase.table("predictions").update({"estimated_opening": val})\
                                         .eq("id", existing[0]['id']).execute()
-                                    st.toast("Zaktualizowano Twój typ!", icon="✅")
+                                    st.toast(f"Zaktualizowano typ: {val_formatted}!", icon="✅")
+                                    st.rerun()
                                 else:
                                     supabase.table("predictions").insert({
                                         "user_id": st.session_state.user.id,
                                         "movie_id": m['id'],
                                         "estimated_opening": val
                                     }).execute()
-                                    st.toast("Zapisano Twój typ!", icon="🚀")
+                                    st.toast(f"Zapisano typ: {val_formatted}!", icon="🚀")
+                                    st.rerun()
 
     # === ZAKŁADKA 2: TABELA LIGI Z ODZNAKAMI I DROPDOWNAMI ===
     elif menu == "🏆 Tabela Ligi":
@@ -514,7 +535,8 @@ else:
                         st.write(f"👥 **Obsada:** {data['cast_members']}")
                         
                         st.write("---")
-                        rel_date = st.date_input("Wybierz datę polskiej premiery:")
+                        distributor_input = st.text_input("🏢 Dystrybutor w Polsce:", placeholder="np. Warner Bros., UIP, Kino Świat, Gutek Film")
+                        rel_date = st.date_input("📅 Wybierz datę polskiej premiery:")
                         
                         if st.button("🚀 Dodaj do Aktywnych Typowań", type="primary"):
                             supabase.table("movies").insert({
@@ -524,11 +546,12 @@ else:
                                 "director": data["director"],
                                 "cast_members": data["cast_members"],
                                 "genres": data["genres"],
+                                "distributor": distributor_input.strip() if distributor_input else None,
                                 "release_date": str(rel_date),
                                 "voting_open": True
                             }).execute()
                             st.session_state.tmdb_data = None
-                            st.toast("Film dodany pomyślnie!", icon="🎬")
+                            st.toast("Film dodany pomyślnie z dystrybutorem!", icon="🎬")
                             st.rerun()
 
         with tab_sync:
