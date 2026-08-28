@@ -11,7 +11,7 @@ TMDB_KEY = st.secrets.get("TMDB_API_KEY", "")
 
 supabase = create_client(URL, KEY)
 
-# Pełny CSS: kinowe tło magenty/burgundu, stylizowane karty, inputy, slidery i przyciski
+# Pełny CSS: kinowe tło magenty/burgundu, stylizowane karty, inputy i przyciski
 st.markdown("""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&display=swap');
@@ -108,16 +108,13 @@ st.markdown("""
         border-color: #E22D68 !important;
         box-shadow: 0 0 10px rgba(226, 45, 104, 0.4) !important;
     }
-
-    /* Akcenty dla suwaka (Slider) */
-    div[data-testid="stSlider"] > div {
-        color: #E22D68 !important;
-    }
     </style>
 """, unsafe_allow_html=True)
 
 if "user" not in st.session_state:
     st.session_state.user = None
+if "is_admin" not in st.session_state:
+    st.session_state.is_admin = False
 
 # --- FUNKCJE POMOCNICZE TMDB ---
 def search_tmdb_movie(title_query):
@@ -181,6 +178,14 @@ if not st.session_state.user:
                     try:
                         res = supabase.auth.sign_in_with_password({"email": email, "password": password})
                         st.session_state.user = res.user
+                        
+                        # Sprawdzenie czy użytkownik ma uprawnienia admina w tabeli profiles
+                        prof = supabase.table("profiles").select("is_admin").eq("id", res.user.id).execute().data
+                        if prof and prof[0].get("is_admin"):
+                            st.session_state.is_admin = True
+                        else:
+                            st.session_state.is_admin = False
+                            
                         st.rerun()
                     except Exception:
                         st.error("Błędny email lub hasło.")
@@ -206,23 +211,33 @@ else:
     st.sidebar.markdown("### **Panel Eksperta**")
     st.sidebar.caption(f"Zalogowany: `{st.session_state.user.email}`")
     
+    if st.session_state.is_admin:
+        st.sidebar.markdown("<span style='background-color:#E22D68; color:white; padding:2px 8px; border-radius:4px; font-size:12px; font-weight:bold;'>ADMINISTRATOR</span>", unsafe_allow_html=True)
+    
     if st.sidebar.button("🚪 Wyloguj"):
         supabase.auth.sign_out()
         st.session_state.user = None
+        st.session_state.is_admin = False
         st.rerun()
         
     st.sidebar.write("---")
-    menu = st.sidebar.radio("Nawigacja", [
+    
+    # Warunkowe budowanie listy nawigacji
+    nav_options = [
         "🎯 Głosowanie Tygodnia", 
         "🏆 Tabela Ligi", 
-        "👤 Swój Profil",
-        "🛠️ Panel Admina (Filmy i TMDB)"
-    ])
+        "👤 Swój Profil"
+    ]
+    if st.session_state.is_admin:
+        nav_options.append("👁️ Podgląd Estymacji (Admin)")
+        nav_options.append("🛠️ Panel Admina (Filmy i TMDB)")
+
+    menu = st.sidebar.radio("Nawigacja", nav_options)
 
     # === ZAKŁADKA 1: GŁOSOWANIE NA WIDZÓW ===
     if menu == "🎯 Głosowanie Tygodnia":
         st.title("🎯 Typowanie Otwarć Kinowych")
-        st.caption("Przesuń suwak, aby wybrać szacowaną **liczbę widzów** w weekend premierowy (piątek - niedziela).")
+        st.caption("Wprowadź szacowaną **liczbę widzów** w weekend premierowy (piątek - niedziela).")
         st.write("---")
         
         movies = supabase.table("movies").select("*").eq("voting_open", True).order("release_date").execute().data
@@ -246,8 +261,6 @@ else:
                             st.caption(f"Tytuł oryginalny: *{m['original_title']}*")
                         
                         st.write(f"📅 **Data premiery:** `{m['release_date']}`")
-                        if m.get("distributor"):
-                            st.write(f"🏢 **Dystrybutor:** {m['distributor']}")
                         if m.get("genres"):
                             st.write(f"🎭 **Gatunek:** {m['genres']}")
                         if m.get("director"):
@@ -261,46 +274,32 @@ else:
                             .eq("user_id", st.session_state.user.id)\
                             .eq("movie_id", m['id']).execute().data
                         
-                        if existing:
-                            raw_val = int(existing[0]['estimated_opening'])
-                            current_val = max(1000, min(500000, raw_val))
-                            saved_label = f"{raw_val:,} widzów".replace(",", " ")
-                            st.markdown(f"💾 *Zapisany w bazie typ:* **{saved_label}**")
-                        else:
-                            current_val = 50000
-                            st.markdown("ℹ️ *Nie oddano jeszcze głosu na ten film.*")
+                        current_val = int(existing[0]['estimated_opening']) if existing else 50000
                         
                         with st.form(key=f"form_{m['id']}"):
-                            val = st.slider(
-                                "Ustaw liczbę widzów:",
-                                min_value=1000,
-                                max_value=500000,
-                                value=current_val,
-                                step=1000,
+                            val = st.number_input(
+                                "Szacowana liczba widzów:", 
+                                min_value=0, 
+                                value=current_val, 
+                                step=5000,
                                 format="%d"
                             )
-                            
-                            val_formatted = f"{val:,} widzów".replace(",", " ")
-                            st.info(f"Wybrano: **{val_formatted}**")
-                            
                             submit = st.form_submit_button("Zapisz typ" if not existing else "Zaktualizuj typ", type="primary")
                             
                             if submit:
                                 if existing:
                                     supabase.table("predictions").update({"estimated_opening": val})\
                                         .eq("id", existing[0]['id']).execute()
-                                    st.toast(f"Zaktualizowano typ: {val_formatted}!", icon="✅")
-                                    st.rerun()
+                                    st.toast("Zaktualizowano Twój typ!", icon="✅")
                                 else:
                                     supabase.table("predictions").insert({
                                         "user_id": st.session_state.user.id,
                                         "movie_id": m['id'],
                                         "estimated_opening": val
                                     }).execute()
-                                    st.toast(f"Zapisano typ: {val_formatted}!", icon="🚀")
-                                    st.rerun()
+                                    st.toast("Zapisano Twój typ!", icon="🚀")
 
-    # === ZAKŁADKA 2: TABELA LIGI Z ODZNAKAMI I DROPDOWNAMI ===
+    # === ZAKŁADKA 2: TABELA LIGI ===
     elif menu == "🏆 Tabela Ligi":
         st.title("🏆 Klasyfikacja Ligi Box Office")
         
@@ -496,8 +495,46 @@ else:
         else:
             st.info("Nie oddałeś jeszcze żadnych typów.")
 
-    # === ZAKŁADKA 4: PANEL ADMINA (ZARZĄDZANIE FILMY & TMDB) ===
-    elif menu == "🛠️ Panel Admina (Filmy i TMDB)":
+    # === ZAKŁADKA DLA ADMINA: PODGLĄD ESTYMACJI EKSPERTÓW ===
+    elif menu == "👁️ Podgląd Estymacji (Admin)" and st.session_state.is_admin:
+        st.title("👁️ Podgląd Typów Ekspertów")
+        st.caption("Widok poufny dostępny wyłącznie dla Administratora.")
+        st.write("---")
+        
+        movies = supabase.table("movies").select("*").order("release_date", desc=True).execute().data
+        
+        if not movies:
+            st.info("Brak filmów w bazie danych.")
+        else:
+            for m in movies:
+                with st.expander(f"🎬 {m['title']} (Premiera: {m['release_date']})"):
+                    preds = supabase.table("predictions")\
+                        .select("estimated_opening, created_at, profiles(full_name)")\
+                        .eq("movie_id", m["id"])\
+                        .execute().data
+                    
+                    if not preds:
+                        st.write("Brak oddanych głosów na ten film.")
+                    else:
+                        table_data = []
+                        total_est = 0
+                        for p in preds:
+                            user_name = p.get("profiles", {}).get("full_name") if p.get("profiles") else "Nieznany Ekspert"
+                            est_val = p.get("estimated_opening", 0)
+                            total_est += est_val
+                            
+                            table_data.append({
+                                "Ekspert": user_name,
+                                "Szacowana widownia": f"{int(est_val):,} widzów".replace(",", " "),
+                                "Data oddania głosu": p.get("created_at", "-")[:19].replace("T", " ")
+                            })
+                            
+                        avg_est = int(total_est / len(preds)) if preds else 0
+                        st.markdown(f"**Liczba głosów:** `{len(preds)}` | **Średnia estymacja branży:** `{avg_est:,}` widzów".replace(",", " "))
+                        st.dataframe(table_data, use_container_width=True, hide_index=True)
+
+    # === ZAKŁADKA DLA ADMINA: ZARZĄDZANIE FILMAMI I TMDB ===
+    elif menu == "🛠️ Panel Admina (Filmy i TMDB)" and st.session_state.is_admin:
         st.title("🛠️ Panel Zarządzania Filmami")
         st.write("---")
         
@@ -535,8 +572,7 @@ else:
                         st.write(f"👥 **Obsada:** {data['cast_members']}")
                         
                         st.write("---")
-                        distributor_input = st.text_input("🏢 Dystrybutor w Polsce:", placeholder="np. Warner Bros., UIP, Kino Świat, Gutek Film")
-                        rel_date = st.date_input("📅 Wybierz datę polskiej premiery:")
+                        rel_date = st.date_input("Wybierz datę polskiej premiery:")
                         
                         if st.button("🚀 Dodaj do Aktywnych Typowań", type="primary"):
                             supabase.table("movies").insert({
@@ -546,12 +582,11 @@ else:
                                 "director": data["director"],
                                 "cast_members": data["cast_members"],
                                 "genres": data["genres"],
-                                "distributor": distributor_input.strip() if distributor_input else None,
                                 "release_date": str(rel_date),
                                 "voting_open": True
                             }).execute()
                             st.session_state.tmdb_data = None
-                            st.toast("Film dodany pomyślnie z dystrybutorem!", icon="🎬")
+                            st.toast("Film dodany pomyślnie!", icon="🎬")
                             st.rerun()
 
         with tab_sync:
