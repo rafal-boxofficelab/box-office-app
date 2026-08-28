@@ -11,7 +11,7 @@ TMDB_KEY = st.secrets.get("TMDB_API_KEY", "")
 
 supabase = create_client(URL, KEY)
 
-# Pełny CSS: kinowe tło magenty/burgundu, stylizowane karty, inputy i przyciski
+# Pełny CSS: kinowe tło magenty/burgundu, stylizowane karty, inputy, suwaki i przyciski
 st.markdown("""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&display=swap');
@@ -53,7 +53,7 @@ st.markdown("""
         box-shadow: 0 0 20px rgba(184, 29, 76, 0.35);
     }
 
-    /* Przyciski CinemaGhost (gradient malinowa magenta) */
+    /* Przyciski CinemaGhost */
     .stButton>button {
         width: 100%;
         border-radius: 6px;
@@ -116,7 +116,7 @@ if "user" not in st.session_state:
 if "is_admin" not in st.session_state:
     st.session_state.is_admin = False
 
-# --- FUNKCJE POMOCNICZE TMDB ---
+# --- FUNKCJE POMOCNICZE TMDB (Z DYSTRYBUTOREM) ---
 def search_tmdb_movie(title_query):
     if not TMDB_KEY:
         return None
@@ -135,7 +135,7 @@ def search_tmdb_movie(title_query):
     movie = results[0]
     movie_id = movie["id"]
     
-    details_url = f"https://api.themoviedb.org/3/movie/{movie_id}?api_key={TMDB_KEY}&append_to_response=credits&language=pl-PL"
+    details_url = f"https://api.themoviedb.org/3/movie/{movie_id}?api_key={TMDB_KEY}&append_to_response=credits,release_dates&language=pl-PL"
     details = requests.get(details_url).json()
     
     poster_path = details.get("poster_path")
@@ -150,13 +150,18 @@ def search_tmdb_movie(title_query):
     cast = details.get("credits", {}).get("cast", [])
     top_cast = ", ".join([a["name"] for a in cast[:4]]) if cast else "Brak danych"
     
+    # Pobieranie dystrybutora / wytwórni
+    companies = details.get("production_companies", [])
+    distributor = companies[0]["name"] if companies else "Brak danych"
+    
     return {
         "title": details.get("title") or movie.get("title"),
         "original_title": details.get("original_title", ""),
         "poster_url": poster_url,
         "director": director_str,
         "cast_members": top_cast,
-        "genres": genres
+        "genres": genres,
+        "distributor": distributor
     }
 
 # --- 2. EKRAN LOGOWANIA / REJESTRACJI ---
@@ -179,7 +184,7 @@ if not st.session_state.user:
                         res = supabase.auth.sign_in_with_password({"email": email, "password": password})
                         st.session_state.user = res.user
                         
-                        # Sprawdzenie czy użytkownik ma uprawnienia admina w tabeli profiles
+                        # Sprawdzenie uprawnień administratora
                         prof = supabase.table("profiles").select("is_admin").eq("id", res.user.id).execute().data
                         if prof and prof[0].get("is_admin"):
                             st.session_state.is_admin = True
@@ -222,7 +227,6 @@ else:
         
     st.sidebar.write("---")
     
-    # Warunkowe budowanie listy nawigacji
     nav_options = [
         "🎯 Głosowanie Tygodnia", 
         "🏆 Tabela Ligi", 
@@ -234,7 +238,7 @@ else:
 
     menu = st.sidebar.radio("Nawigacja", nav_options)
 
-    # === ZAKŁADKA 1: GŁOSOWANIE NA WIDZÓW ===
+    # === ZAKŁADKA 1: GŁOSOWANIE NA WIDZÓW (Z SUWAKIEM I DYSTRYBUTOREM) ===
     if menu == "🎯 Głosowanie Tygodnia":
         st.title("🎯 Typowanie Otwarć Kinowych")
         st.caption("Wprowadź szacowaną **liczbę widzów** w weekend premierowy (piątek - niedziela).")
@@ -247,7 +251,7 @@ else:
         else:
             for m in movies:
                 with st.container(border=True):
-                    col_img, col_info, col_form = st.columns([1.1, 2.4, 1.8])
+                    col_img, col_info, col_form = st.columns([1.1, 2.2, 2.0])
                     
                     with col_img:
                         if m.get("poster_url"):
@@ -261,6 +265,8 @@ else:
                             st.caption(f"Tytuł oryginalny: *{m['original_title']}*")
                         
                         st.write(f"📅 **Data premiery:** `{m['release_date']}`")
+                        if m.get("distributor"):
+                            st.write(f"🏢 **Dystrybutor:** {m['distributor']}")
                         if m.get("genres"):
                             st.write(f"🎭 **Gatunek:** {m['genres']}")
                         if m.get("director"):
@@ -277,25 +283,36 @@ else:
                         current_val = int(existing[0]['estimated_opening']) if existing else 50000
                         
                         with st.form(key=f"form_{m['id']}"):
-                            val = st.number_input(
-                                "Szacowana liczba widzów:", 
+                            # Suwak oraz pole liczbowe
+                            val_slider = st.slider(
+                                "Ustaw suwakiem:", 
                                 min_value=0, 
-                                value=current_val, 
-                                step=5000,
+                                max_value=1500000, 
+                                value=min(current_val, 1500000), 
+                                step=5000
+                            )
+                            val_exact = st.number_input(
+                                "Lub wpisz dokładną liczbę widzów:", 
+                                min_value=0, 
+                                value=val_slider if val_slider != min(current_val, 1500000) else current_val, 
+                                step=1000,
                                 format="%d"
                             )
+                            
+                            final_val = val_exact if val_exact != current_val else val_slider
+                            
                             submit = st.form_submit_button("Zapisz typ" if not existing else "Zaktualizuj typ", type="primary")
                             
                             if submit:
                                 if existing:
-                                    supabase.table("predictions").update({"estimated_opening": val})\
+                                    supabase.table("predictions").update({"estimated_opening": final_val})\
                                         .eq("id", existing[0]['id']).execute()
                                     st.toast("Zaktualizowano Twój typ!", icon="✅")
                                 else:
                                     supabase.table("predictions").insert({
                                         "user_id": st.session_state.user.id,
                                         "movie_id": m['id'],
-                                        "estimated_opening": val
+                                        "estimated_opening": final_val
                                     }).execute()
                                     st.toast("Zapisano Twój typ!", icon="🚀")
 
@@ -567,6 +584,7 @@ else:
                         st.markdown(f"### **{data['title']}**")
                         if data.get("poster_url"):
                             st.image(data["poster_url"], width=160)
+                        st.write(f"🏢 **Dystrybutor:** {data.get('distributor', 'Brak')}")
                         st.write(f"🎭 **Gatunek:** {data['genres']}")
                         st.write(f"🎬 **Reżyseria:** {data['director']}")
                         st.write(f"👥 **Obsada:** {data['cast_members']}")
@@ -582,6 +600,7 @@ else:
                                 "director": data["director"],
                                 "cast_members": data["cast_members"],
                                 "genres": data["genres"],
+                                "distributor": data.get("distributor"),
                                 "release_date": str(rel_date),
                                 "voting_open": True
                             }).execute()
@@ -591,7 +610,7 @@ else:
 
         with tab_sync:
             st.subheader("Uzupełnianie brakujących metryczek")
-            st.caption("Pobiera plakaty, reżyserów, obsadę i gatunki dla istniejących filmów, które mają w bazie wartość NULL.")
+            st.caption("Pobiera plakaty, reżyserów, obsadę, dystrybutora i gatunki dla istniejących filmów, które mają w bazie wartość NULL.")
             
             if st.button("⚡ Rozpocznij pobieranie metryczek dla braków", type="primary"):
                 with st.spinner("Pobieranie i synchronizacja danych..."):
@@ -609,7 +628,8 @@ else:
                                     "poster_url": movie_info["poster_url"],
                                     "director": movie_info["director"],
                                     "cast_members": movie_info["cast_members"],
-                                    "genres": movie_info["genres"]
+                                    "genres": movie_info["genres"],
+                                    "distributor": movie_info.get("distributor")
                                 }).eq("id", m["id"]).execute()
                                 updated_count += 1
                                 
